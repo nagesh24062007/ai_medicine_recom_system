@@ -1,0 +1,75 @@
+A	.dockerignore
+A	.env.example
+A	.gitignore
+D	AI_Medicine_Recommendation_system/.gitignore
+D	AI_Medicine_Recommendation_system/README.md
+D	AI_Medicine_Recommendation_system/api/main.py
+D	AI_Medicine_Recommendation_system/data/raw/Testing.csv
+D	AI_Medicine_Recommendation_system/data/raw/Training.csv
+D	AI_Medicine_Recommendation_system/data/raw/dataset.csv
+D	AI_Medicine_Recommendation_system/data/raw/drug.csv
+D	AI_Medicine_Recommendation_system/database/requirements.txt
+D	AI_Medicine_Recommendation_system/notbooks/01_disease_data_understanding.ipynb
+D	AI_Medicine_Recommendation_system/notbooks/01_testing_eda.ipynb
+D	AI_Medicine_Recommendation_system/notbooks/02_disease_model_preparation.ipynb
+D	AI_Medicine_Recommendation_system/notbooks/02_drug200_eda.ipynb
+D	AI_Medicine_Recommendation_system/notbooks/03_dataset_eda.ipynb
+D	AI_Medicine_Recommendation_system/notbooks/03_drug_classification.ipynb
+D	AI_Medicine_Recommendation_system/notbooks/04_medicine_data_understanding.ipynb
+D	AI_Medicine_Recommendation_system/notbooks/testing_eda.ipynb
+D	AI_Medicine_Recommendation_system/notbooks/text.txt
+D	AI_Medicine_Recommendation_system/requirements.txt
+D	AI_Medicine_Recommendation_system/src/disease_medicine_pipeline.py
+A	Dockerfile
+A	README.md
+A	api/main.py
+R100	AI_Medicine_Recommendation_system/data/processed/medicine_information_cleaned.csv	data/processed/medicine_information_cleaned.csv
+A	frontend/.figma/make/analyze-routes
+A	frontend/.figma/make/deploy
+A	frontend/.figma/make/deploy-preview
+A	frontend/.figma/make/dev
+A	frontend/.figma/make/dev.json
+A	frontend/.figma/make/format
+A	frontend/.figma/make/install
+A	frontend/.figma/make/langserver
+A	frontend/.figma/make/site.json
+A	frontend/.gitattributes
+A	frontend/.gitignore
+A	frontend/.mise.toml
+A	frontend/AGENTS.md
+A	frontend/CLAUDE.md
+A	frontend/index.html
+A	frontend/package-lock.json
+A	frontend/package.json
+A	frontend/pnpm-lock.yaml
+A	frontend/public/favicon.svg
+A	frontend/src/App.tsx
+A	frontend/src/api.ts
+A	frontend/src/components/AuthPage.tsx
+A	frontend/src/components/LanguageSelector.tsx
+A	frontend/src/components/WelcomeAnimation.tsx
+A	frontend/src/components/WelcomePopup.tsx
+A	frontend/src/data/symptoms.ts
+A	frontend/src/index.css
+A	frontend/src/main.tsx
+A	frontend/src/translations.ts
+A	frontend/src/types.ts
+A	frontend/src/vite-env.d.ts
+A	frontend/tsconfig.json
+A	frontend/vite.config.ts
+R100	AI_Medicine_Recommendation_system/models/disease_feature_names.pkl	models/disease_feature_names.pkl
+R100	AI_Medicine_Recommendation_system/models/disease_label_encoder.pkl	models/disease_label_encoder.pkl
+R100	AI_Medicine_Recommendation_system/models/disease_logistic_regression.pkl	models/disease_logistic_regression.pkl
+R100	AI_Medicine_Recommendation_system/models/drug_classifier.pkl	models/drug_classifier.pkl
+A	render.yaml
+A	requirements.txt
+A	src/auth.py
+A	src/database.py
+A	src/disease_medicine_pipeline.py
+R097	AI_Medicine_Recommendation_system/src/disease_prediction.py	src/disease_prediction.py
+R095	AI_Medicine_Recommendation_system/src/explain_prediction.py	src/explain_prediction.py
+R094	AI_Medicine_Recommendation_system/src/input_validation.py	src/input_validation.py
+R100	AI_Medicine_Recommendation_system/src/medicine_pipeline.py	src/medicine_pipeline.py
+R100	AI_Medicine_Recommendation_system/src/medicine_retrieval.py	src/medicine_retrieval.py
+R100	AI_Medicine_Recommendation_system/src/model_check.py	src/model_check.py
+R100	AI_Medicine_Recommendation_system/src/safety_layer.py	src/safety_layer.py
