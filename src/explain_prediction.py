@@ -1,21 +1,26 @@
+from pathlib import Path
 import joblib
 import pandas as pd
 
+
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+MODELS_DIR = BASE_DIR / "models"
 
 # ============================================================
 # LOAD DISEASE MODEL
 # ============================================================
 
 model = joblib.load(
-    "models/disease_logistic_regression.pkl"
+    MODELS_DIR / "disease_logistic_regression.pkl"
 )
 
 encoder = joblib.load(
-    "models/disease_label_encoder.pkl"
+    MODELS_DIR / "disease_label_encoder.pkl"
 )
 
 features = joblib.load(
-    "models/disease_feature_names.pkl"
+    MODELS_DIR / "disease_feature_names.pkl"
 )
 
 

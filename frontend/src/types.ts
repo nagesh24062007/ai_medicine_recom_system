@@ -50,10 +50,12 @@ export interface MedicineInformationResponse {
 
 export interface PredictionSuccessResponse {
   input_symptoms: string[]
-  predicted_condition: string
-  model_confidence: number
-  xai_explanation: XAIExplanation
-  medicine_information: MedicineInformationResponse
+  prediction_status?: "model_output_available" | "insufficient_input" | "uncertain" | "emergency_warning" | string
+  message?: string
+  predicted_condition: string | null
+  model_confidence: number | null
+  xai_explanation: XAIExplanation | null
+  medicine_information: MedicineInformationResponse | null
   disclaimer: string
 }
 
@@ -84,10 +86,12 @@ export interface ApiError {
 export interface PatientUser {
   id: number
   full_name: string
+  gender?: string
   email: string
   dob: string
   mobile: string
   age: number
+  medical_conditions?: string
   created_at: string
   status: string
 }
@@ -100,11 +104,21 @@ export interface AuthResponse {
 
 export interface RegisterPayload {
   full_name: string
+  gender: string
   dob: string
   mobile: string
   email: string
+  medical_conditions: string
   password: string
   confirm_password: string
+}
+
+export interface UpdateProfilePayload {
+  full_name: string
+  gender: string
+  dob: string
+  mobile: string
+  medical_conditions: string
 }
 
 export interface LoginPayload {

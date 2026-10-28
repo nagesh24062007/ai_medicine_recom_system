@@ -6,6 +6,7 @@ import type {
   PatientUser,
   PredictionSuccessResponse,
   RegisterPayload,
+  UpdateProfilePayload,
   ResetPasswordPayload,
 } from "./types"
 
@@ -74,6 +75,7 @@ function getAuthHeaders(): Record<string, string> {
 
 export async function registerPatient(
   payload: RegisterPayload,
+  UpdateProfilePayload,
 ): Promise<AuthResponse> {
   const response = await fetch(`${API_BASE}/auth/register`, {
     method: "POST",
@@ -120,10 +122,20 @@ export async function loginPatient(
   const data = await response.json().catch(() => null)
 
   if (!response.ok) {
-    const message =
-      data?.detail && typeof data.detail === "string"
-        ? data.detail
-        : "Invalid email or password. Please try again."
+    let message = "Invalid email or password. Please try again."
+    if (data?.detail) {
+      if (typeof data.detail === "string") {
+        message = data.detail
+      } else if (Array.isArray(data.detail) && data.detail.length > 0) {
+        message = data.detail.map((err: any) => err.msg || err.message).join("; ")
+      }
+    } else if (response.status === 401) {
+      message = "Invalid email or password. Please check your credentials."
+    } else if (response.status === 403) {
+      message = "Access restricted: age requirement not met (must be at least 18)."
+    } else if (response.status >= 500) {
+      message = "Server error during authentication. Please try again in a few moments."
+    }
     const error: ApiError = {
       type: "client",
       statusCode: response.status,
@@ -357,4 +369,41 @@ export async function predictSymptoms(
     }
     throw error
   }
+}
+
+export async function updatePatientProfile(
+  payload: UpdateProfilePayload,
+): Promise<PatientUser> {
+  const response = await fetch(`${API_BASE}/auth/profile`, {
+    method: "PUT",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+  })
+
+  const data = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    let message = "Failed to update profile information."
+    if (data?.detail) {
+      if (typeof data.detail === "string") {
+        message = data.detail
+      } else if (Array.isArray(data.detail) && data.detail.length > 0) {
+        message = data.detail.map((err: any) => err.msg || err.message).join("; ")
+      }
+    }
+    const error: ApiError = {
+      type: "client",
+      statusCode: response.status,
+      message,
+    }
+    throw error
+  }
+
+  const updatedPatient = data as PatientUser
+  try {
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedPatient))
+  } catch {
+    // Ignore storage issues
+  }
+  return updatedPatient
 }

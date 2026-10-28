@@ -4,10 +4,15 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-# Path to the database file
+# Path to the database file - resolved absolutely
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_DB_PATH = PROJECT_ROOT / "data" / "patients.db"
-DB_PATH = Path(os.environ.get("DATABASE_PATH", str(DEFAULT_DB_PATH)))
+DEFAULT_DB_PATH = (PROJECT_ROOT / "data" / "patients.db").resolve()
+_env_path = os.environ.get("DATABASE_PATH")
+if _env_path:
+    _p = Path(_env_path)
+    DB_PATH = _p.resolve() if _p.is_absolute() else (PROJECT_ROOT / _p).resolve()
+else:
+    DB_PATH = DEFAULT_DB_PATH
 
 
 def get_connection() -> sqlite3.Connection:
@@ -19,7 +24,7 @@ def get_connection() -> sqlite3.Connection:
 
 
 def init_db() -> None:
-    """Initializes the database schema if tables do not already exist."""
+    """Initializes the database schema and performs migrations if needed."""
     conn = get_connection()
     try:
         with conn:
@@ -29,8 +34,10 @@ def init_db() -> None:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     full_name TEXT NOT NULL,
                     dob TEXT NOT NULL,
+                    gender TEXT NOT NULL DEFAULT 'Not specified',
                     email TEXT UNIQUE NOT NULL,
                     mobile TEXT NOT NULL,
+                    medical_conditions TEXT NOT NULL DEFAULT 'None',
                     password_hash TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     status TEXT NOT NULL DEFAULT 'active'
@@ -42,20 +49,35 @@ def init_db() -> None:
                 CREATE INDEX IF NOT EXISTS idx_patients_email ON patients(email);
                 """
             )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_patients_mobile ON patients(mobile);
+                """
+            )
+
+            # Migration for existing databases
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(patients)")
+            cols = {row["name"] if isinstance(row, sqlite3.Row) else row[1] for row in cursor.fetchall()}
+            if "gender" not in cols:
+                conn.execute("ALTER TABLE patients ADD COLUMN gender TEXT NOT NULL DEFAULT 'Not specified'")
+            if "medical_conditions" not in cols:
+                conn.execute("ALTER TABLE patients ADD COLUMN medical_conditions TEXT NOT NULL DEFAULT 'None'")
     finally:
         conn.close()
 
 
 def get_patient_by_email(email: str) -> Optional[Dict[str, Any]]:
-    """Retrieves patient record by normalized lowercase email."""
+    """Retrieves patient record by normalized lowercase trimmed email."""
+    init_db()
     conn = get_connection()
     try:
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT id, full_name, dob, email, mobile, password_hash, created_at, status
+            SELECT id, full_name, dob, gender, email, mobile, medical_conditions, password_hash, created_at, status
             FROM patients
-            WHERE lower(email) = lower(?)
+            WHERE lower(trim(email)) = lower(trim(?))
             LIMIT 1;
             """,
             (email.strip(),),
@@ -70,12 +92,13 @@ def get_patient_by_email(email: str) -> Optional[Dict[str, Any]]:
 
 def get_patient_by_id(patient_id: int) -> Optional[Dict[str, Any]]:
     """Retrieves patient record by unique ID."""
+    init_db()
     conn = get_connection()
     try:
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT id, full_name, dob, email, mobile, created_at, status
+            SELECT id, full_name, dob, gender, email, mobile, medical_conditions, password_hash, created_at, status
             FROM patients
             WHERE id = ?
             LIMIT 1;
@@ -97,22 +120,29 @@ def create_patient(
     mobile: str,
     password_hash: str,
     created_at: str,
+    gender: str = "Not specified",
+    medical_conditions: str = "None",
 ) -> Dict[str, Any]:
     """Inserts a new patient record and returns the patient dictionary."""
+    init_db()
     conn = get_connection()
     try:
+        clean_gender = gender.strip() if gender and gender.strip() else "Not specified"
+        clean_conditions = medical_conditions.strip() if medical_conditions and medical_conditions.strip() else "None"
         with conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                INSERT INTO patients (full_name, dob, email, mobile, password_hash, created_at, status)
-                VALUES (?, ?, lower(?), ?, ?, ?, 'active');
+                INSERT INTO patients (full_name, dob, gender, email, mobile, medical_conditions, password_hash, created_at, status)
+                VALUES (?, ?, ?, lower(trim(?)), ?, ?, ?, ?, 'active');
                 """,
                 (
                     full_name.strip(),
                     dob.strip(),
+                    clean_gender,
                     email.strip(),
                     mobile.strip(),
+                    clean_conditions,
                     password_hash,
                     created_at,
                 ),
@@ -123,8 +153,10 @@ def create_patient(
             "id": patient_id,
             "full_name": full_name.strip(),
             "dob": dob.strip(),
+            "gender": clean_gender,
             "email": email.strip().lower(),
             "mobile": mobile.strip(),
+            "medical_conditions": clean_conditions,
             "created_at": created_at,
             "status": "active",
         }
@@ -132,8 +164,47 @@ def create_patient(
         conn.close()
 
 
+def update_patient_profile(
+    patient_id: int,
+    full_name: str,
+    gender: str,
+    dob: str,
+    mobile: str,
+    medical_conditions: str,
+) -> Optional[Dict[str, Any]]:
+    """Updates the patient profile and medical conditions."""
+    init_db()
+    conn = get_connection()
+    try:
+        clean_gender = gender.strip() if gender and gender.strip() else "Not specified"
+        clean_conditions = medical_conditions.strip() if medical_conditions and medical_conditions.strip() else "None"
+        with conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE patients
+                SET full_name = ?, gender = ?, dob = ?, mobile = ?, medical_conditions = ?
+                WHERE id = ? AND status = 'active';
+                """,
+                (
+                    full_name.strip(),
+                    clean_gender,
+                    dob.strip(),
+                    mobile.strip(),
+                    clean_conditions,
+                    patient_id,
+                ),
+            )
+            if cursor.rowcount == 0:
+                return None
+        return get_patient_by_id(patient_id)
+    finally:
+        conn.close()
+
+
 def update_patient_password(patient_id: int, new_password_hash: str) -> bool:
     """Updates the patient's password hash in the database."""
+    init_db()
     conn = get_connection()
     try:
         with conn:
@@ -154,8 +225,8 @@ def update_patient_password(patient_id: int, new_password_hash: str) -> bool:
 def get_patient_by_mobile(mobile: str) -> Optional[Dict[str, Any]]:
     """
     Retrieves patient record by matching mobile number, normalizing formatting.
-    Safely matches exact formatted numbers or normalized trailing digit sequences.
     """
+    init_db()
     cleaned = re.sub(r"[\s\-\(\)]", "", mobile.strip())
     digits_only = re.sub(r"\D", "", cleaned)
     if not digits_only or len(digits_only) < 10:
@@ -164,10 +235,9 @@ def get_patient_by_mobile(mobile: str) -> Optional[Dict[str, Any]]:
     conn = get_connection()
     try:
         cursor = conn.cursor()
-        # Direct lookup with cleaned string or with/without leading plus
         cursor.execute(
             """
-            SELECT id, full_name, dob, email, mobile, password_hash, created_at, status
+            SELECT id, full_name, dob, gender, email, mobile, medical_conditions, password_hash, created_at, status
             FROM patients
             WHERE (mobile = ? OR mobile = ?) AND status = 'active'
             LIMIT 1;
@@ -181,10 +251,9 @@ def get_patient_by_mobile(mobile: str) -> Optional[Dict[str, Any]]:
         if row:
             return dict(row)
 
-        # Fallback: match by digit sequence (e.g. matching last 10 digits for local/intl formats)
         cursor.execute(
             """
-            SELECT id, full_name, dob, email, mobile, password_hash, created_at, status
+            SELECT id, full_name, dob, gender, email, mobile, medical_conditions, password_hash, created_at, status
             FROM patients
             WHERE status = 'active';
             """

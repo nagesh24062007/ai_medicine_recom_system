@@ -2,433 +2,112 @@ from disease_prediction import predict_disease
 from medicine_pipeline import get_medicine_with_safety
 from input_validation import validate_symptoms
 
+UNRELIABLE_MESSAGE = (
+    "Unable to provide a reliable prediction from the selected symptoms. "
+    "Please consult a qualified healthcare professional."
+)
 
-# ============================================================
-# COMPLETE HEALTHCARE DECISION-SUPPORT PIPELINE
-# ============================================================
 
 def run_healthcare_pipeline(symptoms):
     """
-    Complete academic healthcare decision-support pipeline.
+    Academic healthcare decision-support pipeline.
 
     Flow:
         Symptoms
             ↓
         Input Validation
             ↓
-        Disease Prediction
+        Minimum Symptoms Check (>= 3 distinct symptoms)
             ↓
-        Model Confidence
+        Disease Prediction + Confidence + XAI Explanation
             ↓
-        XAI Explanation
+        Uncertainty Safeguard (Confidence >= 50%)
             ↓
-        Medicine Information Retrieval
-            ↓
-        Safety Information
+        Medicine Information Retrieval + Safety Layer
 
-    This system does not diagnose or prescribe medicines.
+    This system does not diagnose diseases or prescribe medicines.
+    Medicine information is retrieved only when the prediction passes
+    the configured provisional safeguards.
     """
 
-    # --------------------------------------------------------
-    # STEP 1: VALIDATE SYMPTOMS
-    # --------------------------------------------------------
+    # STEP 1: Validate the supplied symptoms
+    validation_result = validate_symptoms(symptoms)
 
-    validation_result = validate_symptoms(
-        symptoms
-    )
-
-    # If validation fails, stop the pipeline
     if not validation_result["valid"]:
-
         return {
             "input_symptoms": symptoms,
             "validation": validation_result,
+            "prediction_status": "invalid_input",
+            "message": validation_result["message"],
             "predicted_condition": None,
             "model_confidence": None,
             "xai_explanation": None,
-            "medicine_information": None
+            "medicine_information": None,
         }
 
-    # Get validated symptoms
-    valid_symptoms = validation_result[
-        "valid_symptoms"
-    ]
+    valid_symptoms = validation_result["valid_symptoms"]
 
-    # --------------------------------------------------------
-    # STEP 2: DISEASE PREDICTION + XAI
-    # --------------------------------------------------------
+    # Avoid repeated symptoms
+    valid_symptoms = list(dict.fromkeys(valid_symptoms))
 
-    prediction_result = predict_disease(
-        valid_symptoms
-    )
+    # STEP 2: Minimum symptoms safeguard (require at least 3 distinct valid symptoms)
+    if len(valid_symptoms) < 3:
+        return {
+            "input_symptoms": symptoms,
+            "validation": validation_result,
+            "prediction_status": "insufficient_input",
+            "message": (
+                "Unable to provide a reliable prediction from fewer than 3 symptoms. "
+                "Please select at least 3 distinct symptoms for evaluation, "
+                "or consult a qualified healthcare professional."
+            ),
+            "predicted_condition": None,
+            "model_confidence": None,
+            "xai_explanation": None,
+            "medicine_information": None,
+        }
 
-    predicted_condition = prediction_result[
-        "condition"
-    ]
+    # STEP 3: Predict a condition with Logistic Regression and calculate XAI feature weights
+    prediction_result = predict_disease(valid_symptoms)
 
-    confidence = prediction_result[
-        "confidence"
-    ]
+    predicted_condition = prediction_result["condition"]
+    confidence = float(prediction_result["confidence"])
+    explanation = prediction_result.get("explanation")
 
-    # Get XAI explanation
-    xai_explanation = prediction_result[
-        "explanation"
-    ]
+    # STEP 4: Provisional uncertainty safeguard (confidence >= 0.50)
+    if confidence < 0.50:
+        return {
+            "input_symptoms": symptoms,
+            "validation": validation_result,
+            "prediction_status": "uncertain",
+            "message": (
+                f"Model confidence ({confidence * 100:.1f}%) is below the provisional safety threshold (50%). "
+                "Prediction and medicine recommendations are withheld for safety. "
+                "Please consult a qualified healthcare professional."
+            ),
+            "predicted_condition": None,
+            "model_confidence": confidence,
+            "xai_explanation": explanation,
+            "medicine_information": None,
+        }
 
-    # --------------------------------------------------------
-    # STEP 3: MEDICINE INFORMATION + SAFETY
-    # --------------------------------------------------------
-
+    # STEP 5: Retrieve medicine information only after safeguards pass
     medicine_result = get_medicine_with_safety(
         predicted_condition,
-        max_results=3
+        max_results=3,
     )
-
-    # --------------------------------------------------------
-    # STEP 4: RETURN COMPLETE RESULT
-    # --------------------------------------------------------
 
     return {
         "input_symptoms": symptoms,
         "validation": validation_result,
+        "prediction_status": "model_output_available",
+        "message": (
+            "This is an experimental model output, not a diagnosis. "
+            "Do not use it to select or take medicines. Consult a "
+            "qualified healthcare professional."
+        ),
         "predicted_condition": predicted_condition,
         "model_confidence": confidence,
-        "xai_explanation": xai_explanation,
-        "medicine_information": medicine_result
+        "xai_explanation": explanation,
+        "medicine_information": medicine_result,
     }
-
-
-# ============================================================
-# TEST THE COMPLETE PIPELINE
-# ============================================================
-
-if __name__ == "__main__":
-
-    # --------------------------------------------------------
-    # TEST INPUT
-    # --------------------------------------------------------
-
-    test_symptoms = [
-        "itching",
-        "skin_rash"
-    ]
-
-    # --------------------------------------------------------
-    # RUN PIPELINE
-    # --------------------------------------------------------
-
-    result = run_healthcare_pipeline(
-        test_symptoms
-    )
-
-    # --------------------------------------------------------
-    # HEADER
-    # --------------------------------------------------------
-
-    print("=" * 60)
-
-    print(
-        "HEALTHCARE DECISION-SUPPORT PIPELINE"
-    )
-
-    print("=" * 60)
-
-    # ========================================================
-    # VALIDATION RESULT
-    # ========================================================
-
-    print("\nValidation:")
-
-    print(
-        "Valid:",
-        result["validation"]["valid"]
-    )
-
-    print(
-        "Message:",
-        result["validation"]["message"]
-    )
-
-    # --------------------------------------------------------
-    # IF INPUT IS INVALID
-    # --------------------------------------------------------
-
-    if not result["validation"]["valid"]:
-
-        print("\nInvalid symptoms:")
-
-        for symptom in result[
-            "validation"
-        ]["invalid_symptoms"]:
-
-            print(
-                "-",
-                symptom
-            )
-
-        print(
-            "\nPipeline stopped because "
-            "the input was invalid."
-        )
-
-    # --------------------------------------------------------
-    # IF INPUT IS VALID
-    # --------------------------------------------------------
-
-    else:
-
-        # ====================================================
-        # INPUT SYMPTOMS
-        # ====================================================
-
-        print("\nInput symptoms:")
-
-        for symptom in result[
-            "input_symptoms"
-        ]:
-
-            print(
-                "-",
-                symptom
-            )
-
-        # ====================================================
-        # PREDICTED CONDITION
-        # ====================================================
-
-        print("\nPredicted condition:")
-
-        print(
-            result["predicted_condition"]
-        )
-
-        # ====================================================
-        # MODEL CONFIDENCE
-        # ====================================================
-
-        print("\nModel confidence:")
-
-        print(
-            f"{result['model_confidence'] * 100:.2f}%"
-        )
-
-        print(
-            "\nNote: Model confidence is a probability "
-            "estimate and not a medical diagnosis."
-        )
-
-        # ====================================================
-        # XAI EXPLANATION
-        # ====================================================
-
-        print("\n" + "-" * 60)
-
-        print(
-            "XAI EXPLANATION"
-        )
-
-        print("-" * 60)
-
-        xai = result[
-            "xai_explanation"
-        ]
-
-        # ----------------------------------------------------
-        # POSITIVE CONTRIBUTIONS
-        # ----------------------------------------------------
-
-        print("\nPositive contributions:")
-
-        positive = xai[
-            "positive_contributions"
-        ]
-
-        if positive:
-
-            for item in positive:
-
-                print(
-                    f"- {item['symptom']}: "
-                    f"{item['contribution']:.4f}"
-                )
-
-        else:
-
-            print("None")
-
-        # ----------------------------------------------------
-        # NEGATIVE CONTRIBUTIONS
-        # ----------------------------------------------------
-
-        print("\nNegative contributions:")
-
-        negative = xai[
-            "negative_contributions"
-        ]
-
-        if negative:
-
-            for item in negative:
-
-                print(
-                    f"- {item['symptom']}: "
-                    f"{item['contribution']:.4f}"
-                )
-
-        else:
-
-            print("None")
-
-        print(
-            "\nXAI Note: These contributions explain "
-            "the model prediction."
-        )
-
-        print(
-            "They do not prove medical causation "
-            "or diagnosis."
-        )
-
-        # ====================================================
-        # MEDICINE INFORMATION
-        # ====================================================
-
-        print("\n" + "-" * 60)
-
-        print(
-            "MEDICINE INFORMATION"
-        )
-
-        print("-" * 60)
-
-        medicine_result = result[
-            "medicine_information"
-        ]
-
-        print(
-            "\nMedicine information found:"
-        )
-
-        print(
-            medicine_result[
-                "match_found"
-            ]
-        )
-
-        print(
-            "Number of medicines:",
-            len(
-                medicine_result[
-                    "medicines"
-                ]
-            )
-        )
-
-        # ====================================================
-        # DISPLAY EACH MEDICINE
-        # ====================================================
-
-        for index, medicine_result_item in enumerate(
-            medicine_result["medicines"],
-            start=1
-        ):
-
-            medicine = medicine_result_item[
-                "medicine_information"
-            ]
-
-            safety = medicine_result_item[
-                "safety"
-            ]
-
-            print("\n" + "-" * 60)
-
-            print(
-                f"Medicine {index}:"
-            )
-
-            print(
-                medicine["name"]
-            )
-
-            print("\nUses:")
-
-            print(
-                medicine["uses"]
-            )
-
-            print("\nComposition:")
-
-            print(
-                medicine["composition"]
-            )
-
-            # ------------------------------------------------
-            # SAFETY INFORMATION
-            # ------------------------------------------------
-
-            print(
-                "\nSafety Information:"
-            )
-
-            for field, value in safety[
-                "safety_information"
-            ].items():
-
-                print(
-                    f"{field}: {value}"
-                )
-
-            # ------------------------------------------------
-            # SAFETY WARNINGS
-            # ------------------------------------------------
-
-            print(
-                "\nSafety warnings:"
-            )
-
-            if safety["warnings"]:
-
-                for warning in safety[
-                    "warnings"
-                ]:
-
-                    print(
-                        "-",
-                        warning
-                    )
-
-            else:
-
-                print(
-                    "No specific warnings found."
-                )
-
-        # ====================================================
-        # FINAL SAFETY NOTICE
-        # ====================================================
-
-        print("\n" + "=" * 60)
-
-        print(
-            "IMPORTANT:"
-        )
-
-        print(
-            "This system provides academic "
-            "decision-support and medicine "
-            "information only."
-        )
-
-        print(
-            "It does not provide a medical diagnosis "
-            "or prescribe medicines."
-        )
-
-        print(
-            "Consult a qualified healthcare "
-            "professional before making "
-            "medical decisions."
-        )
-
-        print("=" * 60)

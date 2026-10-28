@@ -407,15 +407,7 @@ function TopBar({
         </div>
       </div>
 
-      <div className="top-search-bar" role="search">
-        <Icon name="search" size={17} />
-        <input
-          type="text"
-          placeholder={t.searchPlaceholder}
-          aria-label="Global search"
-          readOnly
-        />
-      </div>
+      
 
       <div className="top-header-right" ref={popoverRef}>
         {/* 3-Language Selector: English, Marathi, Hindi */}
@@ -1227,138 +1219,7 @@ function Dashboard({
         </article>
       </section>
 
-      {/* Row 2: Mid Charts Grid */}
-      <section className="dashboard-grid-mid">
-        {/* Model Classification & Calibration Wave Chart */}
-        <article className="card wave-card">
-          <div className="card-header-row">
-            <div>
-              <span className="section-kicker">Validation</span>
-              <h3>Model Calibration & Classification Curve</h3>
-            </div>
-            <div className="wave-legend">
-              <span>
-                <i style={{ background: "#2563eb" }} /> Model Confidence
-              </span>
-              <span>
-                <i style={{ background: "#ff5138" }} /> Decision Threshold
-              </span>
-            </div>
-          </div>
-          <div className="wave-chart-wrapper">
-            <svg
-              className="wave-chart-svg"
-              viewBox="0 0 500 160"
-              preserveAspectRatio="none"
-            >
-              <defs>
-                <linearGradient id="waveFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#2563eb" stopOpacity="0.32" />
-                  <stop offset="80%" stopColor="#2563eb" stopOpacity="0.02" />
-                </linearGradient>
-                <linearGradient id="lineStroke" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stopColor="#2563eb" />
-                  <stop offset="70%" stopColor="#7c3aed" />
-                  <stop offset="100%" stopColor="#ff5138" />
-                </linearGradient>
-              </defs>
-
-              {/* Grid lines */}
-              <line
-                x1="0"
-                y1="40"
-                x2="500"
-                y2="40"
-                stroke="#f1f5f9"
-                strokeDasharray="3 3"
-              />
-              <line
-                x1="0"
-                y1="80"
-                x2="500"
-                y2="80"
-                stroke="#f1f5f9"
-                strokeDasharray="3 3"
-              />
-              <line
-                x1="0"
-                y1="120"
-                x2="500"
-                y2="120"
-                stroke="#f1f5f9"
-                strokeDasharray="3 3"
-              />
-
-              {/* Area path */}
-              <path
-                d="M0,130 C70,120 120,70 190,65 C260,60 310,25 380,20 C430,16 470,25 500,18 L500,160 L0,160 Z"
-                fill="url(#waveFill)"
-              />
-
-              {/* Line path */}
-              <path
-                d="M0,130 C70,120 120,70 190,65 C260,60 310,25 380,20 C430,16 470,25 500,18"
-                fill="none"
-                stroke="url(#lineStroke)"
-                strokeWidth="3.5"
-                strokeLinecap="round"
-              />
-
-              {/* Active Point Circle */}
-              <circle
-                cx="380"
-                cy="20"
-                r="5"
-                fill="#ff5138"
-                stroke="#ffffff"
-                strokeWidth="2.5"
-              />
-            </svg>
-            <div className="wave-tooltip">98.2% Accuracy</div>
-          </div>
-          <div className="chart-axis-labels">
-            <span>Fold 1</span>
-            <span>Fold 2</span>
-            <span>Fold 3</span>
-            <span>Fold 4</span>
-            <span>Fold 5</span>
-            <span>Validation Holdout</span>
-          </div>
-        </article>
-
-        {/* Feature Signal Frequency Bar Chart */}
-        <article className="card barchart-card">
-          <div className="card-header-row">
-            <div>
-              <span className="section-kicker">Feature Attribution</span>
-              <h3>Feature Signal Frequency</h3>
-            </div>
-            <span className="card-pill-btn">Top Signals</span>
-          </div>
-          <div className="barchart-wrapper">
-            <div className="barchart-tooltip">Peak Signal: 180</div>
-            {[
-              { label: "Fever", height: "68%", highlight: false },
-              { label: "Fatigue", height: "76%", highlight: false },
-              { label: "Rash", height: "94%", highlight: true },
-              { label: "Cough", height: "58%", highlight: false },
-              { label: "Pain", height: "52%", highlight: false },
-              { label: "Nausea", height: "70%", highlight: false },
-            ].map((bar) => (
-              <div className="barchart-col" key={bar.label}>
-                <div
-                  className={`barchart-bar ${bar.highlight ? "highlight" : ""}`}
-                  style={{ height: bar.height }}
-                />
-                <span>{bar.label}</span>
-              </div>
-            ))}
-          </div>
-          <div className="chart-axis-labels" style={{ marginTop: 12 }}>
-            <span>Relative weight distribution across 41 conditions</span>
-          </div>
-        </article>
-      </section>
+      
 
       {/* Row 3: Supported Disease Explorer Table */}
       <section className="card table-card">
@@ -1740,8 +1601,178 @@ function Results({
     )
   }
 
-  // --- Real prediction successfully loaded ---
-  const confidencePercent = (prediction.model_confidence * 100).toFixed(1)
+  // --- Handle Emergency Warning Status ---
+  if (prediction.prediction_status === "emergency_warning") {
+    return (
+      <>
+        <PageHeader
+          title="Prediction Results"
+          description="Review the model output, feature contributions, and related information returned by the API."
+        />
+        <Notice kind="error">
+          <strong style={{ fontSize: "16px", color: "var(--red, #ef4444)" }}>
+            EMERGENCY ADVISORY: Potential Emergency Symptoms Detected
+          </strong>
+          <span style={{ fontSize: "14px", marginTop: "6px", display: "block" }}>
+            {prediction.message ||
+              "Potential emergency symptoms detected. Seek emergency medical care immediately. Do not wait for an AI prediction."}
+          </span>
+          <div className="notice-action" style={{ marginTop: "14px" }}>
+            <button
+              className="notice-retry-btn"
+              style={{ background: "#ef4444" }}
+              onClick={onModify}
+              type="button"
+            >
+              <Icon name="activity" size={14} /> Change Symptoms
+            </button>
+          </div>
+        </Notice>
+
+        <section className="card" style={{ padding: "24px", marginTop: "16px", borderLeft: "4px solid #ef4444" }}>
+          <h3 style={{ color: "#b91c1c", marginBottom: "8px" }}>Emergency Protocol Notice</h3>
+          <p style={{ color: "#475569", lineHeight: "1.6" }}>
+            Symptoms such as chest pain, breathlessness, and profuse sweating can indicate life-threatening conditions requiring acute emergency intervention. In accordance with clinical safety guidelines, machine learning predictions and medicine records are intentionally suppressed to avoid delay in seeking medical attention.
+          </p>
+          <div className="result-symptoms" style={{ marginTop: "16px" }}>
+            <span>Reported symptoms</span>
+            <div className="chips">
+              {prediction.input_symptoms.map((symptomKey) => (
+                <span className="chip chip--muted" key={symptomKey} style={{ borderColor: "#fca5a5" }}>
+                  <Icon name="alert" size={13} />
+                  {getSymptomLabel(symptomKey)}
+                </span>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <Notice kind="warning">
+          <strong>Medical safety notice</strong>
+          <span>
+            {prediction.disclaimer ||
+              "Academic decision-support only. This is not a diagnosis or prescription. Consult a qualified healthcare professional."}
+          </span>
+        </Notice>
+      </>
+    )
+  }
+
+  // --- Handle Insufficient Symptoms Status (< 3 symptoms) ---
+  if (prediction.prediction_status === "insufficient_input") {
+    return (
+      <>
+        <PageHeader
+          title="Prediction Results"
+          description="Review the model output, feature contributions, and related information returned by the API."
+        />
+        <Notice kind="warning">
+          <strong>Insufficient Symptoms For Evaluation</strong>
+          <span style={{ display: "block", marginTop: "4px" }}>
+            {prediction.message ||
+              "Unable to provide a reliable prediction from fewer than 3 symptoms. Please select at least 3 distinct symptoms for evaluation, or consult a qualified healthcare professional."}
+          </span>
+          <div className="notice-action" style={{ marginTop: "14px" }}>
+            <button
+              className="notice-retry-btn"
+              onClick={onModify}
+              type="button"
+            >
+              <Icon name="activity" size={14} /> Add More Symptoms
+            </button>
+          </div>
+        </Notice>
+
+        <section className="card" style={{ padding: "24px", marginTop: "16px" }}>
+          <h3 style={{ marginBottom: "8px" }}>Multi-Symptom Baseline Required</h3>
+          <p style={{ color: "#475569", lineHeight: "1.6" }}>
+            Our diagnostic classification pipeline requires at least 3 clinical features to safely compute pattern associations across 41 condition profiles. Isolated symptoms yield ambiguous classifications that do not meet system safety thresholds.
+          </p>
+          <div className="result-symptoms" style={{ marginTop: "16px" }}>
+            <span>Currently selected ({prediction.input_symptoms.length})</span>
+            <div className="chips">
+              {prediction.input_symptoms.map((symptomKey) => (
+                <span className="chip chip--muted" key={symptomKey}>
+                  <Icon name="check" size={13} />
+                  {getSymptomLabel(symptomKey)}
+                </span>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <Notice kind="info">
+          <strong>Academic decision-support disclaimer</strong>
+          <span>
+            {prediction.disclaimer ||
+              "Academic decision-support only. This is not a diagnosis or prescription. Consult a qualified healthcare professional."}
+          </span>
+        </Notice>
+      </>
+    )
+  }
+
+  // --- Handle Uncertain Prediction Status (Confidence < 50%) ---
+  if (prediction.prediction_status === "uncertain") {
+    const confVal = prediction.model_confidence != null ? (prediction.model_confidence * 100).toFixed(1) : null
+    return (
+      <>
+        <PageHeader
+          title="Prediction Results"
+          description="Review the model output, feature contributions, and related information returned by the API."
+        />
+        <Notice kind="warning">
+          <strong>Uncertain Model Evaluation (Confidence Below 50%)</strong>
+          <span style={{ display: "block", marginTop: "4px" }}>
+            {prediction.message ||
+              "Model confidence is below the provisional safety threshold (50%). Result withheld for safety."}
+          </span>
+          <div className="notice-action" style={{ marginTop: "14px" }}>
+            <button
+              className="notice-retry-btn"
+              onClick={onModify}
+              type="button"
+            >
+              <Icon name="activity" size={14} /> Review Selected Symptoms
+            </button>
+          </div>
+        </Notice>
+
+        <section className="card" style={{ padding: "24px", marginTop: "16px" }}>
+          <h3 style={{ marginBottom: "8px" }}>Safety Threshold Safeguard Active</h3>
+          <p style={{ color: "#475569", lineHeight: "1.6" }}>
+            The combination of symptoms evaluated yielded a statistical confidence score of{" "}
+            {confVal ? <strong>{confVal}%</strong> : "under 50%"}, which falls below our clinical verification cutoff. Condition prediction and medicine records are withheld to prevent misguidance.
+          </p>
+          <div className="result-symptoms" style={{ marginTop: "16px" }}>
+            <span>Evaluated symptoms</span>
+            <div className="chips">
+              {prediction.input_symptoms.map((symptomKey) => (
+                <span className="chip chip--muted" key={symptomKey}>
+                  <Icon name="check" size={13} />
+                  {getSymptomLabel(symptomKey)}
+                </span>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <Notice kind="info">
+          <strong>Academic decision-support disclaimer</strong>
+          <span>
+            {prediction.disclaimer ||
+              "Academic decision-support only. This is not a diagnosis or prescription. Consult a qualified healthcare professional."}
+          </span>
+        </Notice>
+      </>
+    )
+  }
+
+  // --- Real prediction successfully loaded (Status: model_output_available) ---
+  const confidencePercent =
+    prediction.model_confidence != null
+      ? (prediction.model_confidence * 100).toFixed(1)
+      : "—" 
   const positiveContributions =
     prediction.xai_explanation?.positive_contributions || []
   const negativeContributions =
@@ -2417,10 +2448,22 @@ export default function App() {
     const token = getAuthToken()
     if (token) {
       fetchCurrentUser()
-        .then((user) => setCurrentUser(user))
-        .catch(() => {
-          clearAuthSession()
-          setCurrentUser(null)
+        .then((user) => {
+          setCurrentUser(user)
+        })
+        .catch((err: any) => {
+          if (err?.statusCode === 401) {
+            clearAuthSession()
+            setCurrentUser(null)
+          } else {
+            // Keep cached user on network glitch / server startup
+            const cachedUser = getStoredUser()
+            if (cachedUser) {
+              setCurrentUser(cachedUser)
+            } else {
+              setCurrentUser(null)
+            }
+          }
         })
         .finally(() => setAuthLoading(false))
     } else {

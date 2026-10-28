@@ -26,6 +26,7 @@ from database import (
     get_patient_by_id,
     get_patient_by_mobile,
     create_patient,
+    update_patient_profile,
     update_patient_password,
 )
 from auth import (
@@ -38,6 +39,27 @@ from auth import (
     create_access_token,
     decode_access_token,
 )
+
+
+def check_emergency_symptoms(symptoms: List[str]) -> Optional[str]:
+    """
+    Checks for high-risk emergency symptoms pattern.
+    If detected, an emergency advisory is returned immediately.
+    """
+    normalized = {symptom.strip().lower() for symptom in symptoms}
+    emergency_patterns = [
+        {"chest_pain", "breathlessness", "sweating"}
+    ]
+
+    for pattern in emergency_patterns:
+        if pattern.issubset(normalized):
+            return (
+                "Potential emergency symptoms detected. "
+                "Seek emergency medical care immediately. "
+                "Do not wait for an AI prediction."
+            )
+
+    return None
 
 
 @asynccontextmanager
@@ -83,15 +105,17 @@ class SymptomRequest(BaseModel):
     symptoms: List[str] = Field(
         min_length=1,
         description="List of symptoms to evaluate",
-        examples=[["itching", "skin_rash"]],
+        examples=[["itching", "skin_rash", "nodal_skin_eruptions"]],
     )
 
 
 class RegisterRequest(BaseModel):
     full_name: str = Field(min_length=2, max_length=100, description="Patient full name")
+    gender: str = Field(default="Not specified", max_length=50, description="Patient gender")
     dob: str = Field(description="Date of birth in YYYY-MM-DD format", examples=["1998-05-15"])
-    mobile: str = Field(min_length=10, max_length=20, description="Mobile contact number")
+    mobile: str = Field(min_length=10, max_length=25, description="Mobile contact number")
     email: str = Field(pattern=EMAIL_REGEX, description="Patient email address")
+    medical_conditions: str = Field(default="None", max_length=1000, description="Previous medical conditions")
     password: str = Field(min_length=6, max_length=128, description="Account password")
     confirm_password: str = Field(min_length=6, max_length=128, description="Password confirmation")
 
@@ -99,6 +123,14 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: str = Field(pattern=EMAIL_REGEX, description="Patient email address")
     password: str = Field(min_length=1, max_length=128, description="Account password")
+
+
+class UpdateProfileRequest(BaseModel):
+    full_name: str = Field(min_length=2, max_length=100, description="Patient full name")
+    gender: str = Field(min_length=1, max_length=50, description="Patient gender")
+    dob: str = Field(description="Date of birth in YYYY-MM-DD format", examples=["1998-05-15"])
+    mobile: str = Field(min_length=10, max_length=25, description="Mobile contact number")
+    medical_conditions: str = Field(default="None", max_length=1000, description="Previous medical conditions")
 
 
 class ResetPasswordRequest(BaseModel):
@@ -115,10 +147,12 @@ class VerifyMobileRequest(BaseModel):
 class PatientProfile(BaseModel):
     id: int
     full_name: str
+    gender: str = "Not specified"
     email: str
     dob: str
     mobile: str
     age: int
+    medical_conditions: str = "None"
     created_at: str
     status: str
 
@@ -138,6 +172,7 @@ def get_current_patient(
 ) -> Dict[str, Any]:
     """
     Validates Authorization: Bearer <token> header and returns the patient record.
+    Strictly isolated: patients can only access their own records.
     """
     if not authorization:
         raise HTTPException(
@@ -210,11 +245,11 @@ def register(request: RegisterRequest):
         )
 
     # 3. Mobile format validation
-    is_valid_mobile, mobile_res = validate_mobile(request.mobile)
+    is_valid_mobile, cleaned_mobile = validate_mobile(request.mobile)
     if not is_valid_mobile:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=mobile_res,
+            detail=cleaned_mobile,
         )
 
     # 4. Email uniqueness validation
@@ -223,27 +258,43 @@ def register(request: RegisterRequest):
     if existing_patient:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="An account with this email address already exists.",
+            detail="An account with this email address already exists. Please sign in instead.",
         )
 
-    # 5. Secure password hashing
+    # 5. Mobile uniqueness check
+    existing_mobile = get_patient_by_mobile(cleaned_mobile)
+    if existing_mobile:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this mobile number already exists. Please sign in or use another number.",
+        )
+
+    # 6. Secure password hashing using scrypt
     try:
         pwd_hash = hash_password(request.password)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
-    # 6. Save patient to persistent database
+    # 7. Save patient to persistent SQLite database
     now_iso = datetime.utcnow().isoformat() + "Z"
-    patient = create_patient(
-        full_name=request.full_name,
-        dob=request.dob,
-        email=normalized_email,
-        mobile=mobile_res,
-        password_hash=pwd_hash,
-        created_at=now_iso,
-    )
+    try:
+        patient = create_patient(
+            full_name=request.full_name,
+            dob=request.dob,
+            email=normalized_email,
+            mobile=cleaned_mobile,
+            password_hash=pwd_hash,
+            created_at=now_iso,
+            gender=request.gender,
+            medical_conditions=request.medical_conditions,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Registration failed: {str(exc)}",
+        )
 
-    # 7. Generate JWT access token
+    # 8. Generate JWT access token
     token = create_access_token(
         patient_id=patient["id"],
         email=patient["email"],
@@ -256,10 +307,12 @@ def register(request: RegisterRequest):
         patient=PatientProfile(
             id=patient["id"],
             full_name=patient["full_name"],
+            gender=patient.get("gender") or "Not specified",
             email=patient["email"],
             dob=patient["dob"],
             mobile=patient["mobile"],
             age=age,
+            medical_conditions=patient.get("medical_conditions") or "None",
             created_at=patient["created_at"],
             status=patient["status"],
         ),
@@ -306,10 +359,12 @@ def login(request: LoginRequest):
         patient=PatientProfile(
             id=patient["id"],
             full_name=patient["full_name"],
+            gender=patient.get("gender") or "Not specified",
             email=patient["email"],
             dob=patient["dob"],
             mobile=patient["mobile"],
             age=age,
+            medical_conditions=patient.get("medical_conditions") or "None",
             created_at=patient["created_at"],
             status=patient["status"],
         ),
@@ -327,12 +382,69 @@ def get_me(current_patient: Dict[str, Any] = Depends(get_current_patient)):
     return PatientProfile(
         id=current_patient["id"],
         full_name=current_patient["full_name"],
+        gender=current_patient.get("gender") or "Not specified",
         email=current_patient["email"],
         dob=current_patient["dob"],
         mobile=current_patient["mobile"],
         age=age,
+        medical_conditions=current_patient.get("medical_conditions") or "None",
         created_at=current_patient["created_at"],
         status=current_patient["status"],
+    )
+
+
+@router.put("/auth/profile", response_model=PatientProfile)
+def update_profile(
+    request: UpdateProfileRequest,
+    current_patient: Dict[str, Any] = Depends(get_current_patient),
+):
+    """
+    Updates the authenticated patient's profile and medical history.
+    Strictly isolated: patients can only update their own record.
+    """
+    # 1. Validate age eligibility
+    is_valid_age, age_err, age = validate_age_eligibility(request.dob)
+    if not is_valid_age:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=age_err,
+        )
+
+    # 2. Validate mobile
+    is_valid_mobile, cleaned_mobile = validate_mobile(request.mobile)
+    if not is_valid_mobile:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=cleaned_mobile,
+        )
+
+    # 3. Update database
+    updated = update_patient_profile(
+        patient_id=current_patient["id"],
+        full_name=request.full_name,
+        gender=request.gender,
+        dob=request.dob,
+        mobile=cleaned_mobile,
+        medical_conditions=request.medical_conditions,
+    )
+
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update profile record.",
+        )
+
+    return PatientProfile(
+        id=updated["id"],
+        full_name=updated["full_name"],
+        gender=updated.get("gender") or "Not specified",
+        email=updated["email"],
+        dob=updated["dob"],
+        mobile=updated["mobile"],
+        age=age,
+        medical_conditions=updated.get("medical_conditions") or "None",
+        created_at=updated["created_at"],
+        status=updated["status"],
     )
 
 
@@ -358,45 +470,39 @@ def reset_password(request: ResetPasswordRequest):
     if len(request.new_password) < 6:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password must be at least 6 characters long.",
+            detail="New password must be at least 6 characters long.",
         )
 
     normalized_email = request.email.strip().lower()
     patient = get_patient_by_email(normalized_email)
     if not patient:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No registered account found with this email address.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Verification failed. The email address and date of birth do not match our records.",
         )
 
-    # Verify identity against registered Date of Birth
     if patient["dob"].strip() != request.dob.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Identity verification failed: Date of birth does not match our records.",
+            detail="Verification failed. The email address and date of birth do not match our records.",
         )
 
-    try:
-        new_hash = hash_password(request.new_password)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-
-    success = update_patient_password(patient["id"], new_hash)
-    if not success:
+    pwd_hash = hash_password(request.new_password)
+    updated = update_patient_password(patient["id"], pwd_hash)
+    if not updated:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Could not update password. Please try again.",
+            detail="Unable to update password. Please try again.",
         )
 
-    return {"message": "Password updated successfully. You can now sign in with your new password."}
+    return {"message": "Password updated successfully. You can now log in with your new password."}
 
 
 @router.post("/auth/verify-mobile", response_model=AuthResponse)
-def verify_mobile_auth(request: VerifyMobileRequest):
+def verify_mobile_login(request: VerifyMobileRequest):
     """
     Verifies the mobile number against registered patient records.
     If verified, returns authentication session token to access the dashboard.
-    Securely prevents user enumeration and unverified access.
     """
     is_valid_format, cleaned_mobile = validate_mobile(request.mobile)
     if not is_valid_format:
@@ -407,7 +513,6 @@ def verify_mobile_auth(request: VerifyMobileRequest):
 
     patient = get_patient_by_mobile(cleaned_mobile)
     if not patient:
-        # Secure message: does not reveal whether a number is registered in the database
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Verification failed. The mobile number could not be verified with our records.",
@@ -436,10 +541,12 @@ def verify_mobile_auth(request: VerifyMobileRequest):
         patient=PatientProfile(
             id=patient["id"],
             full_name=patient["full_name"],
+            gender=patient.get("gender") or "Not specified",
             email=patient["email"],
             dob=patient["dob"],
             mobile=patient["mobile"],
             age=age,
+            medical_conditions=patient.get("medical_conditions") or "None",
             created_at=patient["created_at"],
             status=patient["status"],
         ),
@@ -465,8 +572,29 @@ def predict(
     _current_patient: Dict[str, Any] = Depends(get_current_patient),
 ):
     try:
+        # Step 1: Emergency symptom pattern check
+        emergency_warning = check_emergency_symptoms(request.symptoms)
+        if emergency_warning:
+            return {
+                "input_symptoms": request.symptoms,
+                "prediction_status": "emergency_warning",
+                "message": emergency_warning,
+                "predicted_condition": None,
+                "model_confidence": None,
+                "xai_explanation": None,
+                "medicine_information": None,
+                "disclaimer": (
+                    "Potential emergency symptoms detected. "
+                    "This system is not a medical diagnosis tool. "
+                    "Do not wait for an AI prediction or take medicines. "
+                    "Seek emergency medical care immediately."
+                ),
+            }
+
+        # Step 2: Run the healthcare decision-support pipeline
         result = run_healthcare_pipeline(request.symptoms)
 
+        # Step 3: Handle invalid symptoms rejection (HTTP 422)
         if not result["validation"]["valid"]:
             raise HTTPException(
                 status_code=422,
@@ -477,15 +605,19 @@ def predict(
                 },
             )
 
+        # Step 4: Return model prediction and safety information
         return {
             "input_symptoms": result["input_symptoms"],
-            "predicted_condition": result["predicted_condition"],
-            "model_confidence": result["model_confidence"],
-            "xai_explanation": result["xai_explanation"],
-            "medicine_information": result["medicine_information"],
+            "prediction_status": result.get("prediction_status", "model_output_available"),
+            "message": result.get("message", "Model evaluation completed."),
+            "predicted_condition": result.get("predicted_condition"),
+            "model_confidence": result.get("model_confidence"),
+            "xai_explanation": result.get("xai_explanation"),
+            "medicine_information": result.get("medicine_information"),
             "disclaimer": (
                 "Academic decision-support only. "
                 "This is not a diagnosis or prescription. "
+                "Do not use this output to select or take medicines. "
                 "Consult a qualified healthcare professional."
             ),
         }
@@ -495,7 +627,7 @@ def predict(
     except Exception as exc:
         raise HTTPException(
             status_code=500,
-            detail="Prediction failed. Check the server terminal.",
+            detail=f"Prediction failed: {str(exc)}",
         ) from exc
 
 
