@@ -10,6 +10,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from database import (
+    init_db,
+    get_patient_by_email,
+    get_patient_by_id,
+    get_patient_by_mobile,
+    create_patient,
+    update_patient_profile,
+    update_patient_password,
+    save_prediction_history,
+)
 
 EMAIL_REGEX = r"^[\w\.\+\-]+@[a-zA-Z0-9\-]+\.[a-zA-Z0-9\-\.]+$"
 
