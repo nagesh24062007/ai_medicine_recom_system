@@ -270,3 +270,57 @@ def get_patient_by_mobile(mobile: str) -> Optional[Dict[str, Any]]:
         return None
     finally:
         conn.close()
+        
+def save_prediction_history(
+    patient_id: int,
+    symptoms: list,
+    predicted_condition: Optional[str],
+    model_confidence: Any,
+    result_json: Dict[str, Any],
+) -> int:
+    """Saves a prediction result for the logged-in patient."""
+    import json
+    from datetime import datetime, timezone
+
+    conn = get_connection()
+    try:
+        with conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS prediction_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    patient_id INTEGER NOT NULL,
+                    symptoms TEXT NOT NULL,
+                    predicted_condition TEXT,
+                    model_confidence REAL,
+                    result_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (patient_id) REFERENCES patients(id)
+                );
+                """
+            )
+
+            cursor = conn.execute(
+                """
+                INSERT INTO prediction_history (
+                    patient_id,
+                    symptoms,
+                    predicted_condition,
+                    model_confidence,
+                    result_json,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    patient_id,
+                    json.dumps(symptoms),
+                    predicted_condition,
+                    model_confidence,
+                    json.dumps(result_json, default=str),
+                    datetime.now(timezone.utc).isoformat(),
+                ),
+            )
+            return cursor.lastrowid
+    finally:
+        conn.close()
