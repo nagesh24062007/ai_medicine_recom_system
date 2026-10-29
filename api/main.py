@@ -10,6 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from disease_medicine_pipeline import run_healthcare_pipeline
+
 from database import (
     init_db,
     get_patient_by_email,
@@ -19,6 +21,17 @@ from database import (
     update_patient_profile,
     update_patient_password,
     save_prediction_history,
+)
+
+from auth import (
+    hash_password,
+    verify_password,
+    validate_age_eligibility,
+    validate_mobile,
+    calculate_age,
+    parse_dob,
+    create_access_token,
+    decode_access_token,
 )
 
 EMAIL_REGEX = r"^[\w\.\+\-]+@[a-zA-Z0-9\-]+\.[a-zA-Z0-9\-\.]+$"
@@ -582,8 +595,9 @@ def predict(
     _current_patient: Dict[str, Any] = Depends(get_current_patient),
 ):
     try:
-        # Step 1: Emergency symptom pattern check
+        # Step 1: Check for emergency symptoms
         emergency_warning = check_emergency_symptoms(request.symptoms)
+
         if emergency_warning:
             return {
                 "input_symptoms": request.symptoms,
@@ -595,16 +609,15 @@ def predict(
                 "medicine_information": None,
                 "disclaimer": (
                     "Potential emergency symptoms detected. "
-                    "This system is not a medical diagnosis tool. "
-                    "Do not wait for an AI prediction or take medicines. "
+                    "Do not wait for an AI prediction. "
                     "Seek emergency medical care immediately."
                 ),
             }
 
-        # Step 2: Run the healthcare decision-support pipeline
+        # Step 2: Run prediction pipeline
         result = run_healthcare_pipeline(request.symptoms)
 
-        # Step 3: Handle invalid symptoms rejection (HTTP 422)
+        # Step 3: Reject invalid symptoms
         if not result["validation"]["valid"]:
             raise HTTPException(
                 status_code=422,
@@ -615,11 +628,17 @@ def predict(
                 },
             )
 
-        # Step 4: Return model prediction and safety information
-        return {
+        # Step 4: Prepare response
+        response_data = {
             "input_symptoms": result["input_symptoms"],
-            "prediction_status": result.get("prediction_status", "model_output_available"),
-            "message": result.get("message", "Model evaluation completed."),
+            "prediction_status": result.get(
+                "prediction_status",
+                "model_output_available",
+            ),
+            "message": result.get(
+                "message",
+                "Model evaluation completed.",
+            ),
             "predicted_condition": result.get("predicted_condition"),
             "model_confidence": result.get("model_confidence"),
             "xai_explanation": result.get("xai_explanation"),
@@ -632,14 +651,26 @@ def predict(
             ),
         }
 
+        # Step 5: Save prediction in database
+        save_prediction_history(
+            patient_id=int(_current_patient["id"]),
+            symptoms=request.symptoms,
+            predicted_condition=response_data["predicted_condition"],
+            model_confidence=response_data["model_confidence"],
+            result_json=response_data,
+        )
+
+        # Step 6: Return response
+        return response_data
+
     except HTTPException:
         raise
+
     except Exception as exc:
         raise HTTPException(
             status_code=500,
             detail=f"Prediction failed: {str(exc)}",
         ) from exc
-
 
 # Include routers for both direct paths and /api prefixed paths
 app.include_router(router)
